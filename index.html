@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Khóa luận kỹ sư - Công cụ kiểm thử bảo mật</title>
+  <script src="https://cdn.jsdelivr.net/npm/js-sha256@0.9.0/src/sha256.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      margin: 0;
+      padding: 0;
+    }
+
+    h1, h2 {
+      text-align: center;
+      color: #2c3e50;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 30px auto;
+      padding: 20px;
+    }
+
+    form {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    input[type="text"] {
+      padding: 10px;
+      font-size: 16px;
+      width: 300px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      margin-right: 10px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #0984e3;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #067bc2;
+    }
+
+    .flash {
+      margin: 10px auto;
+      max-width: 600px;
+      padding: 10px;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .flash.success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+
+    .flash.error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+
+    .main-dashboard {
+      display: flex;
+      gap: 30px;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+
+    .info-panel, .tool-panel {
+      flex: 1;
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    .info-panel h3, .tool-panel h3 {
+      color: #0984e3;
+    }
+
+    .info-panel ul {
+      padding-left: 20px;
+    }
+
+    .tool-card {
+      border: 1px solid #dfe6e9;
+      padding: 15px;
+      border-radius: 10px;
+      background: #f9f9f9;
+      margin-bottom: 20px;
+    }
+
+    .btn-run {
+      background-color: #00b894;
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      text-decoration: none;
+    }
+
+    .btn-run:hover {
+      background-color: #019875;
+    }
+
+    @media (max-width: 900px) {
+      .main-dashboard {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>KHÓA LUẬN KỸ SƯ KHÓA 12 - NĂM HỌC 2024-2025</h1>
+    <h2>Đề tài: Nghiên cứu và phát triển công cụ kiểm thử bảo mật tự động cho ứng dụng web</h2>
+
+    <!-- Form nhập key -->
+    <form id="keyForm" method="POST" action="{{ url_for('validate_key') }}">
+      <input type="text" id="security_key" name="security_key" placeholder="Nhập key bảo mật" required>
+      <button type="submit">Kiểm tra</button>
+    </form>
+
+    <!-- Thông báo -->
+    <div class="flash-messages">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    </div>
+
+    <!-- Luôn hiển thị thông tin -->
+    <div class="main-dashboard">
+      <div class="info-panel">
+        <h3>👩‍🏫 Giảng viên hướng dẫn:</h3>
+        <p>Họ tên: Nguyễn Thị Hồng Thảo</p>
+        <p>Email: <a href="mailto:thaonth@huit.edu.vn">thaonth@huit.edu.vn</a></p>
+        <p>SĐT: 0977979885</p>
+
+        <h3>👨‍🎓 Nhóm sinh viên thực hiện:</h3>
+        <ul>
+          <li>Nguyễn Trần Thế Vy - MSSV: 2033216610 - Lớp: 12DHBM09</li>
+          <li>Lê Dũng - MSSV: 2033216372 - Lớp: 12DHBM05</li>
+          <li>Hà Đức Chung - MSSV: 2033210506 - Lớp: 12DHBM06</li>
+        </ul>
+      </div>
+
+      <!-- Chỉ hiển thị công cụ nếu key hợp lệ -->
+      {% if session.get('key_validated') %}
+      <div class="tool-panel">
+        <h3>🧰 Công cụ kiểm thử</h3>
+        {% if tools %}
+          {% for tool in tools %}
+          <div class="tool-card">
+            <h4>{{ tool.icon }} {{ tool.name }}</h4>
+            <p>{{ tool.desc }}</p>
+            <a href="{{ url_for('run_script', script_name=tool.script) }}" class="btn-run">🚀 Chạy công cụ</a>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p>Không có công cụ nào được tìm thấy.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>
+    // Băm SHA256 trước khi gửi key
+    document.getElementById('keyForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const input = document.getElementById('security_key');
+      input.value = sha256(input.value);
+      this.submit();
+    });
+  </script>
+</body>
+</html>
